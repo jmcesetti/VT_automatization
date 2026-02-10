@@ -13,6 +13,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare folders
+        run: |
+          mkdir -p data/weekly
+
       - name: Find latest weekly CSV
         run: |
           set -e
@@ -24,7 +28,8 @@ jobs:
 
             for HOUR in 2359 2300 2200 2100 2000 1900; do
               FILE="VehicleExceptionReport - $DATE $HOUR"
-              URL="${{ secrets.SP_BASE_URL }}/$FILE.csv"
+              FILE_ENCODED=$(echo "$FILE" | sed 's/ /%20/g')
+              URL="${{ secrets.SP_BASE_URL }}/$FILE_ENCODED.csv"
 
               echo "Trying $URL"
 
