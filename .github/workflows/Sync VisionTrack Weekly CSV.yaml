@@ -1,0 +1,51 @@
+name: Sync VisionTrack Weekly CSV
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Lunes 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find latest weekly CSV
+        run: |
+          set -e
+
+          FOUND=0
+
+          for i in {0..8}; do
+            DATE=$(date -d "-$i week" +%Y-%m-%d)
+
+            for HOUR in 2359 2300 2200 2100 2000 1900; do
+              FILE="VehicleExceptionReport - $DATE $HOUR"
+              URL="${{ secrets.SP_BASE_URL }}/$FILE.csv"
+
+              echo "Trying $URL"
+
+              if curl -f -L "$URL" -o data/latest.csv; then
+                echo "Found: $FILE"
+                cp data/latest.csv "data/weekly/$FILE.csv"
+                FOUND=1
+                break 2
+              fi
+            done
+          done
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo "No CSV found"
+            exit 1
+          fi
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/
+          git commit -m "Update VisionTrack weekly CSV" || echo "No changes"
+          git push
