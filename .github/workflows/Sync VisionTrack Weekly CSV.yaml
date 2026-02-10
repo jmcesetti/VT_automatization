@@ -17,40 +17,15 @@ jobs:
         run: |
           mkdir -p data/weekly
 
-      - name: Find latest weekly CSV
+      - name: Download latest CSV
         run: |
-          set -e
-
-          FOUND=0
-
-          for i in {0..8}; do
-            DATE=$(date -d "-$i week" +%Y-%m-%d)
-
-            for HOUR in 2359 2300 2200 2100 2000 1900; do
-              FILE="VehicleExceptionReport - $DATE $HOUR"
-              FILE_ENCODED=$(echo "$FILE" | sed 's/ /%20/g')
-              URL="${{ secrets.SP_BASE_URL }}/$FILE_ENCODED.csv"
-
-              echo "Trying $URL"
-
-              if curl -f -L "$URL" -o data/latest.csv; then
-                echo "Found: $FILE"
-                cp data/latest.csv "data/weekly/$FILE.csv"
-                FOUND=1
-                break 2
-              fi
-            done
-          done
-
-          if [ "$FOUND" -eq 0 ]; then
-            echo "No CSV found"
-            exit 1
-          fi
+          curl -f -L "${{ secrets.SP_BASE_URL }}/VehicleExceptionReport_latest.csv" \
+            -o data/weekly/latest.csv
 
       - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add data/
-          git commit -m "Update VisionTrack weekly CSV" || echo "No changes"
+          git add data/weekly/latest.csv
+          git commit -m "Update VisionTrack CSV" || echo "No changes"
           git push
