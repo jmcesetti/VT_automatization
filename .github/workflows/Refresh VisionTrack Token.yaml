@@ -1,0 +1,64 @@
+name: Refresh VisionTrack Token
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # Cada 4 horas (UTC)
+  workflow_dispatch:
+
+concurrency:
+  group: refresh-token
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions: {}
+
+    steps:
+      - name: Request token (client credentials)
+        id: token
+        env:
+          TOKEN_URL: ${{ secrets.VT_AUTH_URL }}
+          CLIENT_ID: ${{ secrets.VT_ID }}
+          CLIENT_SECRET: ${{ secrets.VT_SECRET }}
+          SCOPE: vt.api
+        run: |
+          set -euo pipefail
+
+          args=(
+            --data-urlencode "grant_type=client_credentials"
+            --data-urlencode "client_id=${CLIENT_ID}"
+            --data-urlencode "client_secret=${CLIENT_SECRET}"
+          )
+          if [ -n "${SCOPE:-}" ]; then
+            args+=(--data-urlencode "scope=${SCOPE}")
+          fi
+
+          response=$(curl -sS -f -X POST "$TOKEN_URL" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            "${args[@]}")
+
+          token=$(echo "$response" | jq -r '.access_token // empty')
+          if [ -z "$token" ]; then
+            echo "::error::La respuesta no trae access_token"
+            echo "$response" | jq 'del(.access_token, .refresh_token)' || true
+            exit 1
+          fi
+
+          echo "::add-mask::$token"
+          echo "$token" > "$RUNNER_TEMP/token.txt"
+
+      - name: Write token to gist
+        env:
+          GH_TOKEN: ${{ secrets.VT_GIST_TOKEN }}
+          GIST_ID: ${{ secrets.VT_GIST_ID }}
+        run: |
+          set -euo pipefail
+          jq -n --rawfile content "$RUNNER_TEMP/token.txt" \
+            '{files: {"token.txt": {content: ($content | rtrimstr("\n"))}}}' \
+            | gh api -X PATCH "gists/${GIST_ID}" --input - > /dev/null
+          echo "Gist actualizado: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Clean up
+        if: always()
+        run: rm -f "$RUNNER_TEMP/token.txt"
